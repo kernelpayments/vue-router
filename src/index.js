@@ -111,7 +111,7 @@ export default class VueRouter {
     const history = this.history
 
     if (history instanceof HTML5History) {
-      history.transitionTo(history.getCurrentLocation())
+      history.transitionTo([history.getCurrentLocation()])
     } else if (history instanceof HashHistory) {
       const setupHashListener = () => {
         history.setupListeners()
@@ -123,9 +123,21 @@ export default class VueRouter {
       )
     }
 
-    history.listen(route => {
+    history.listen((routes, equalLayers) => {
       this.apps.forEach((app) => {
-        app._route = route
+        // Mutate only the changed routes, so we don't trigger unnecessary updates.
+        // Changed elements
+        for (let i = equalLayers; i < app._routes.length && i < routes.length; i++) {
+          app.$set(app._routes, i, routes[i])
+        }
+        // Added elements
+        for (let i = app._routes.length; i < routes.length; i++) {
+          app._routes.push(routes[i])
+        }
+        // Removed
+        while (app._routes.length > routes.length) {
+          app._routes.pop()
+        }
       })
     })
   }
@@ -151,11 +163,43 @@ export default class VueRouter {
   }
 
   push (location: RawLocation, onComplete?: Function, onAbort?: Function) {
-    this.history.push(location, onComplete, onAbort)
+    this.history.navigateLastLayer(location, true, onComplete, onAbort)
   }
 
   replace (location: RawLocation, onComplete?: Function, onAbort?: Function) {
-    this.history.replace(location, onComplete, onAbort)
+    this.history.navigateLastLayer(location, false, onComplete, onAbort)
+  }
+
+  pushAddLayer (location: RawLocation, onComplete?: Function, onAbort?: Function) {
+    this.history.navigateAddLayer(location, true, onComplete, onAbort)
+  }
+
+  replaceAddLayer (location: RawLocation, onComplete?: Function, onAbort?: Function) {
+    this.history.navigateAddLayer(location, false, onComplete, onAbort)
+  }
+
+  pushRemoveLayer (onComplete?: Function, onAbort?: Function) {
+    this.history.navigateRemoveLayer(true, onComplete, onAbort)
+  }
+
+  replaceRemoveLayer (onComplete?: Function, onAbort?: Function) {
+    this.history.navigateRemoveLayer(false, onComplete, onAbort)
+  }
+
+  pushLayer (layer: number, location: RawLocation, onComplete?: Function, onAbort?: Function) {
+    this.history.navigateLayer(layer, location, true, onComplete, onAbort)
+  }
+
+  replaceLayer (layer: number, location: RawLocation, onComplete?: Function, onAbort?: Function) {
+    this.history.navigateLayer(layer, location, false, onComplete, onAbort)
+  }
+
+  pushAllLayers (locations: Array<RawLocation>, onComplete?: Function, onAbort?: Function) {
+    this.history.navigateAllLayers(locations, true, onComplete, onAbort)
+  }
+
+  replaceAllLayers (locations: Array<RawLocation>, onComplete?: Function, onAbort?: Function) {
+    this.history.navigateAllLayers(locations, false, onComplete, onAbort)
   }
 
   go (n: number) {

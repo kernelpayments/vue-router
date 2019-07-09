@@ -8,6 +8,10 @@ export default {
     name: {
       type: String,
       default: 'default'
+    },
+    nextLayer: {
+      type: Boolean,
+      default: false
     }
   },
   render (_, { props, children, parent, data }) {
@@ -18,8 +22,15 @@ export default {
     // so that components rendered by router-view can resolve named slots
     const h = parent.$createElement
     const name = props.name
-    const route = parent.$route
     const cache = parent._routerViewCache || (parent._routerViewCache = {})
+
+    const layer = parent._routerLayer + (props.nextLayer ? 1 : 0)
+    // render empty node if we don't have this high layers
+    if (parent._routerRoot._routes.length <= layer) {
+      cache[name] = null
+      return h()
+    }
+    const route = parent._routerRoot._routes[layer]
 
     // determine current view depth, also check to see if the tree
     // has been toggled inactive but kept-alive.
@@ -64,6 +75,7 @@ export default {
       ) {
         matched.instances[name] = val
       }
+      vm._routerLayer = layer
     }
 
     // also register instance in prepatch hook

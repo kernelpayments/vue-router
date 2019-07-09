@@ -22,6 +22,8 @@ export default {
     exact: Boolean,
     append: Boolean,
     replace: Boolean,
+    addLayer: Boolean,
+    removeLayer: Boolean,
     activeClass: String,
     exactActiveClass: String,
     event: {
@@ -67,9 +69,21 @@ export default {
     const handler = e => {
       if (guardEvent(e)) {
         if (this.replace) {
-          router.replace(location)
+          if (this.addLayer) {
+            router.replaceAddLayer(location)
+          } else if (this.removeLayer) {
+            router.replaceRemoveLayer()
+          } else {
+            router.replaceLayer(this._routerLayer, location)
+          }
         } else {
-          router.push(location)
+          if (this.addLayer) {
+            router.pushAddLayer(location)
+          } else if (this.removeLayer) {
+            router.pushRemoveLayer()
+          } else {
+            router.pushLayer(this._routerLayer, location)
+          }
         }
       }
     }

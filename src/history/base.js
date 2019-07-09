@@ -16,8 +16,8 @@ import { NavigationDuplicated } from './errors'
 export class History {
   router: Router
   base: string
-  current: Route
-  pending: ?Route
+  current: Array<Route>;
+  pending: ?Array<Route>;
   cb: (r: Route) => void
   ready: boolean
   readyCbs: Array<Function>
@@ -26,8 +26,11 @@ export class History {
 
   // implemented by sub-classes
   +go: (n: number) => void
-  +push: (loc: RawLocation) => void
-  +replace: (loc: RawLocation) => void
+  +navigateAllLayers: (locs: Array<RawLocation>, push: boolean) => void
+  +navigateLastLayer: (loc: RawLocation, push: boolean) => void
+  +navigateLayer: (layer: number, loc: RawLocation, push: boolean) => void
+  +navigateAddLayer: (loc: RawLocation, push: boolean) => void
+  +navigateRemoveLayer: (push: boolean) => void
   +ensureURL: (push?: boolean) => void
   +getCurrentLocation: () => string
 
@@ -35,7 +38,7 @@ export class History {
     this.router = router
     this.base = normalizeBase(base)
     // start with a route object that stands for "nowhere"
-    this.current = START
+    this.current = [START]
     this.pending = null
     this.ready = false
     this.readyCbs = []
@@ -62,24 +65,31 @@ export class History {
     this.errorCbs.push(errorCb)
   }
 
+  getClosestCurrent (n: number) {
+    if (n >= this.current.length) {
+      return this.current[this.current.length - 1]
+    }
+    return this.current[n]
+  }
+
   transitionTo (
-    location: RawLocation,
+    locations: Array<RawLocation>,
     onComplete?: Function,
     onAbort?: Function
   ) {
-    const route = this.router.match(location, this.current)
+    const routes = locations.map((location, i) => this.router.match(location, this.getClosestCurrent(i)))
     this.confirmTransition(
-      route,
-      () => {
-        this.updateRoute(route)
-        onComplete && onComplete(route)
+      routes,
+      (equalLayers) => {
+        this.updateCurrent(routes, equalLayers)
+        onComplete && onComplete(routes)
         this.ensureURL()
 
         // fire ready cbs once
         if (!this.ready) {
           this.ready = true
           this.readyCbs.forEach(cb => {
-            cb(route)
+            cb(routes)
           })
         }
       },
@@ -97,7 +107,7 @@ export class History {
     )
   }
 
-  confirmTransition (route: Route, onComplete: Function, onAbort?: Function) {
+  confirmTransition (routes: Array<Route>, onComplete: Function, onAbort?: Function) {
     const current = this.current
     const abort = err => {
       // after merging https://github.com/vuejs/vue-router/pull/2771 we
@@ -116,18 +126,27 @@ export class History {
       }
       onAbort && onAbort(err)
     }
-    if (
-      isSameRoute(route, current) &&
-      // in the case the route map has been dynamically appended to
-      route.matched.length === current.matched.length
-    ) {
-      this.ensureURL()
-      return abort(new NavigationDuplicated(route))
+
+    let equalLayers = 0
+    for (equalLayers = 0; equalLayers < routes.length && equalLayers < current.length; equalLayers++) {
+      if (
+        !isSameRoute(routes[equalLayers], current[equalLayers]) ||
+        // in the case the route map has been dynamically appended to
+        routes[equalLayers].matched.length !== current[equalLayers].matched.length
+      ) {
+        break
+      }
     }
 
-    const { updated, deactivated, activated } = resolveQueue(
-      this.current.matched,
-      route.matched
+    if (equalLayers === routes.length && equalLayers === current.length) {
+      this.ensureURL()
+      return abort(new NavigationDuplicated(routes))
+    }
+
+    const { updated, deactivated, activated } = resolveQueues(
+      current,
+      routes,
+      equalLayers
     )
 
     const queue: Array<?NavigationGuard> = [].concat(
@@ -143,13 +162,13 @@ export class History {
       resolveAsyncComponents(activated)
     )
 
-    this.pending = route
+    this.pending = routes
     const iterator = (hook: NavigationGuard, next) => {
-      if (this.pending !== route) {
+      if (this.pending !== routes) {
         return abort()
       }
       try {
-        hook(route, current, (to: any) => {
+        hook(routes, current, (to: any) => {
           if (to === false || isError(to)) {
             // next(false) -> abort navigation, ensure current URL
             this.ensureURL(true)
@@ -178,17 +197,17 @@ export class History {
 
     runQueue(queue, iterator, () => {
       const postEnterCbs = []
-      const isValid = () => this.current === route
+      const isValid = () => this.current === routes
       // wait until async components are resolved before
       // extracting in-component enter guards
       const enterGuards = extractEnterGuards(activated, postEnterCbs, isValid)
       const queue = enterGuards.concat(this.router.resolveHooks)
       runQueue(queue, iterator, () => {
-        if (this.pending !== route) {
+        if (this.pending !== routes) {
           return abort()
         }
         this.pending = null
-        onComplete(route)
+        onComplete(equalLayers)
         if (this.router.app) {
           this.router.app.$nextTick(() => {
             postEnterCbs.forEach(cb => {
@@ -200,12 +219,12 @@ export class History {
     })
   }
 
-  updateRoute (route: Route) {
+  updateCurrent (routes: Array<Route>, equalLayers: number) {
     const prev = this.current
-    this.current = route
-    this.cb && this.cb(route)
+    this.current = routes
+    this.cb && this.cb(routes, equalLayers)
     this.router.afterHooks.forEach(hook => {
-      hook && hook(route, prev)
+      hook && hook(routes, prev)
     })
   }
 }
@@ -228,6 +247,37 @@ function normalizeBase (base: ?string): string {
   }
   // remove trailing slash
   return base.replace(/\/$/, '')
+}
+
+function resolveQueues (
+  current: Array<Route>,
+  next: Array<Route>,
+  equalLayers: number
+): {
+  updated: Array<RouteRecord>,
+  activated: Array<RouteRecord>,
+  deactivated: Array<RouteRecord>
+} {
+  const res = {
+    updated: [],
+    activated: [],
+    deactivated: []
+  }
+
+  const min = Math.min(current.length, next.length)
+  for (let i = equalLayers; i < min; i++) {
+    const r = resolveQueue(current[i].matched, next[i].matched)
+    res.updated.push(...r.updated)
+    res.activated.push(...r.activated)
+    res.deactivated.push(...r.deactivated)
+  }
+  for (let i = min; i < current.length; i++) {
+    res.deactivated.push(...current[i].matched)
+  }
+  for (let i = min; i < next.length; i++) {
+    res.activated.push(...next[i].matched)
+  }
+  return res
 }
 
 function resolveQueue (
