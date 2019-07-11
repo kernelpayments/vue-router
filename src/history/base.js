@@ -258,26 +258,28 @@ function resolveQueues (
   activated: Array<RouteRecord>,
   deactivated: Array<RouteRecord>
 } {
-  const res = {
-    updated: [],
-    activated: [],
-    deactivated: []
-  }
+  const updated = []
+  const activated = []
+  const deactivated = []
 
   const min = Math.min(current.length, next.length)
   for (let i = equalLayers; i < min; i++) {
     const r = resolveQueue(current[i].matched, next[i].matched)
-    res.updated.push(...r.updated)
-    res.activated.push(...r.activated)
-    res.deactivated.push(...r.deactivated)
+    updated.push(...r.updated)
+    activated.push(...r.activated)
+    deactivated.push(...r.deactivated)
   }
   for (let i = min; i < current.length; i++) {
-    res.deactivated.push(...current[i].matched)
+    deactivated.push(...current[i].matched)
   }
   for (let i = min; i < next.length; i++) {
-    res.activated.push(...next[i].matched)
+    activated.push(...next[i].matched)
   }
-  return res
+  return {
+    updated,
+    activated,
+    deactivated
+  }
 }
 
 function resolveQueue (

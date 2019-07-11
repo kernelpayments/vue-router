@@ -2166,28 +2166,28 @@ function resolveQueues (
   next,
   equalLayers
 ) {
-  var ref, ref$1, ref$2, ref$3, ref$4;
-
-  var res = {
-    updated: [],
-    activated: [],
-    deactivated: []
-  };
+  var updated = [];
+  var activated = [];
+  var deactivated = [];
 
   var min = Math.min(current.length, next.length);
   for (var i = equalLayers; i < min; i++) {
-    var r = resolveQueue(current[i].matched, next[i].matched)
-    (ref = res.updated).push.apply(ref, r.updated)
-    (ref$1 = res.activated).push.apply(ref$1, r.activated)
-    (ref$2 = res.deactivated).push.apply(ref$2, r.deactivated);
+    var r = resolveQueue(current[i].matched, next[i].matched);
+    updated.push.apply(updated, r.updated);
+    activated.push.apply(activated, r.activated);
+    deactivated.push.apply(deactivated, r.deactivated);
   }
   for (var i$1 = min; i$1 < current.length; i$1++) {
-    (ref$3 = res.deactivated).push.apply(ref$3, current[i$1].matched);
+    deactivated.push.apply(deactivated, current[i$1].matched);
   }
   for (var i$2 = min; i$2 < next.length; i$2++) {
-    (ref$4 = res.activated).push.apply(ref$4, next[i$2].matched);
+    activated.push.apply(activated, next[i$2].matched);
   }
-  return res
+  return {
+    updated: updated,
+    activated: activated,
+    deactivated: deactivated
+  }
 }
 
 function resolveQueue (
