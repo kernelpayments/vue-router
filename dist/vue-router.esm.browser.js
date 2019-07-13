@@ -1052,7 +1052,7 @@ var Link = {
         if (this.replace) {
           if (this.addLayer) {
             router.replaceAddLayer(location);
-          } else if (this.removeLayer) {
+          } else if (this.removeLayer || this.to === "!") {
             router.replaceRemoveLayer();
           } else {
             router.replaceLayer(this._routerLayer, location);
@@ -1060,7 +1060,7 @@ var Link = {
         } else {
           if (this.addLayer) {
             router.pushAddLayer(location);
-          } else if (this.removeLayer) {
+          } else if (this.removeLayer || this.to === "!") {
             router.pushRemoveLayer();
           } else {
             router.pushLayer(this._routerLayer, location);
